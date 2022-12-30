@@ -10,6 +10,9 @@ import java.io.*;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
+import java.lang.Math;
+import java.util.*;
+
 /**
  * Each instance of HeapPage stores data for one page of HeapFiles and
  * implements the Page interface that is used by BufferPool.
@@ -76,8 +79,7 @@ public class HeapPage implements Page {
      */
     private int getNumTuples() {
         // TODO: some code goes here
-        return 0;
-
+        return (int) Math.floor((BufferPool.getPageSize() * 8) / (this.td.getSize() * 8 + 1));
     }
 
     /**
@@ -86,10 +88,8 @@ public class HeapPage implements Page {
      * @return the number of bytes in the header of a page in a HeapFile with each tuple occupying tupleSize bytes
      */
     private int getHeaderSize() {
-
         // TODO: some code goes here
-        return 0;
-
+        return (int) Math.ceil((double) this.numSlots / 8);
     }
 
     /**
@@ -122,7 +122,7 @@ public class HeapPage implements Page {
      */
     public HeapPageId getId() {
         // TODO: some code goes here
-        throw new UnsupportedOperationException("implement this");
+        return this.pid;
     }
 
     /**
@@ -294,7 +294,13 @@ public class HeapPage implements Page {
      */
     public int getNumUnusedSlots() {
         // TODO: some code goes here
-        return 0;
+        int ret = 0;
+        for (int i = 0; i < this.numSlots; i++) {
+            if (!isSlotUsed(i)) {
+                ret++;
+            }
+        }
+        return ret;
     }
 
     /**
@@ -302,6 +308,12 @@ public class HeapPage implements Page {
      */
     public boolean isSlotUsed(int i) {
         // TODO: some code goes here
+        if (i < this.numSlots) {
+            int numbyte = i / 8;
+            int offset = i % 8;
+            // header[numbyte] the offset(th) bit
+            return (this.header[numbyte] & (0x1 << offset)) != 0;
+        }
         return false;
     }
 
@@ -317,9 +329,36 @@ public class HeapPage implements Page {
      * @return an iterator over all tuples on this page (calling remove on this iterator throws an UnsupportedOperationException)
      *         (note that this iterator shouldn't return tuples in empty slots!)
      */
+    public class TupleIterator implements Iterator {
+        private final Iterator<Tuple> itr;
+        public TupleIterator () {
+            ArrayList<Tuple> arr = new ArrayList<Tuple>(tuples.length);
+            for (int i = 0; i < tuples.length; i++) {
+                if (isSlotUsed(i)) {
+                    arr.add(i, tuples[i]);
+                }
+            }
+            itr = arr.iterator();
+        }
+
+        @Override
+        public boolean hasNext() {
+            return itr.hasNext();
+        }
+
+        @Override
+        public Tuple next() {
+            return itr.next();
+        }
+
+        @Override
+        public void remove() {
+            throw new UnsupportedOperationException("cannot remove interator");
+        }
+    }
     public Iterator<Tuple> iterator() {
         // TODO: some code goes here
-        return null;
+        return new TupleIterator().itr;
     }
 
 }

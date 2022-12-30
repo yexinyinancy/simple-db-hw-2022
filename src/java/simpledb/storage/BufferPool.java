@@ -12,6 +12,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+import javafx.scene.chart.PieChart.Data;
+
 /**
  * BufferPool manages the reading and writing of pages into memory from
  * disk. Access methods call into it to retrieve pages, and it fetches
@@ -38,6 +40,8 @@ public class BufferPool {
      */
     public static final int DEFAULT_PAGES = 50;
 
+    private ConcurrentHashMap<PageId, Page> bp;
+    private final int maxNumPages;
     /**
      * Creates a BufferPool that caches up to numPages pages.
      *
@@ -45,6 +49,8 @@ public class BufferPool {
      */
     public BufferPool(int numPages) {
         // TODO: some code goes here
+        bp = new ConcurrentHashMap<PageId, Page>(numPages);
+        this.maxNumPages = numPages;
     }
 
     public static int getPageSize() {
@@ -79,7 +85,16 @@ public class BufferPool {
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
         // TODO: some code goes here
-        return null;
+        Page page = bp.get(pid);
+        if (page == null) {
+            if (bp.size() >= this.maxNumPages) {
+                throw new DbException("bufferpoll is full.");
+            }
+            else {
+                bp.put(pid, Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid));
+            }
+        }
+        return bp.get(pid);
     }
 
     /**

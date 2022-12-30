@@ -4,6 +4,10 @@ import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Iterator;
 
+import simpledb.storage.TupleDesc.TDItem;
+
+import java.util.*;
+
 /**
  * Tuple maintains information about the contents of a tuple. Tuples have a
  * specified schema specified by a TupleDesc object and contain Field objects
@@ -12,7 +16,9 @@ import java.util.Iterator;
 public class Tuple implements Serializable {
 
     private static final long serialVersionUID = 1L;
-
+    private ArrayList<Field> tupItems;
+    private TupleDesc td_;
+    private RecordId rid_;
     /**
      * Create a new tuple with the specified schema (type).
      *
@@ -21,6 +27,7 @@ public class Tuple implements Serializable {
      */
     public Tuple(TupleDesc td) {
         // TODO: some code goes here
+        resetTupleDesc(td);
     }
 
     /**
@@ -28,7 +35,7 @@ public class Tuple implements Serializable {
      */
     public TupleDesc getTupleDesc() {
         // TODO: some code goes here
-        return null;
+        return td_;
     }
 
     /**
@@ -37,7 +44,7 @@ public class Tuple implements Serializable {
      */
     public RecordId getRecordId() {
         // TODO: some code goes here
-        return null;
+        return rid_;
     }
 
     /**
@@ -47,6 +54,7 @@ public class Tuple implements Serializable {
      */
     public void setRecordId(RecordId rid) {
         // TODO: some code goes here
+        rid_ = rid;
     }
 
     /**
@@ -57,6 +65,7 @@ public class Tuple implements Serializable {
      */
     public void setField(int i, Field f) {
         // TODO: some code goes here
+        tupItems.add(i, f);
     }
 
     /**
@@ -65,6 +74,9 @@ public class Tuple implements Serializable {
      */
     public Field getField(int i) {
         // TODO: some code goes here
+        if (tupItems.size() >= i) {
+            return tupItems.get(i);
+        }
         return null;
     }
 
@@ -78,7 +90,12 @@ public class Tuple implements Serializable {
      */
     public String toString() {
         // TODO: some code goes here
-        throw new UnsupportedOperationException("Implement this");
+        StringBuffer sb = new StringBuffer();
+        for (int i = 0; i < tupItems.size(); i++) {
+            sb.append((tupItems.get(i).toString() + "\t"));
+        }
+        return sb.toString();
+        // throw new UnsupportedOperationException("Implement this");
     }
 
     /**
@@ -86,7 +103,7 @@ public class Tuple implements Serializable {
      */
     public Iterator<Field> fields() {
         // TODO: some code goes here
-        return null;
+        return tupItems.iterator();
     }
 
     /**
@@ -94,5 +111,10 @@ public class Tuple implements Serializable {
      */
     public void resetTupleDesc(TupleDesc td) {
         // TODO: some code goes here
+        td_ = td;
+        tupItems = new ArrayList<Field>();
+        // for (int i = 0; i < td.numFields(); i++) {
+        //     tupItems.add(null);
+        // }
     }
 }
