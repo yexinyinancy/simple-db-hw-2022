@@ -88,11 +88,10 @@ public class BufferPool {
         Page page = bp.get(pid);
         if (page == null) {
             if (bp.size() >= this.maxNumPages) {
-                throw new DbException("bufferpoll is full.");
+                evictPage();
             }
-            else {
-                bp.put(pid, Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid));
-            }
+            bp.put(pid, Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid));
+            q.offer(pid);
         }
         return bp.get(pid);
     }
@@ -161,6 +160,12 @@ public class BufferPool {
             throws DbException, IOException, TransactionAbortedException {
         // TODO: some code goes here
         // not necessary for lab1
+        List<Page> pages = Database.getCatalog().getDatabaseFile(tableId).insertTuple(tid, t);
+        for (Page p : pages) {
+            p.markDirty(true, tid);
+            bp.put(p.getId(), p);
+            q.offer(p.getId());
+        }
     }
 
     /**
@@ -180,7 +185,14 @@ public class BufferPool {
             throws DbException, IOException, TransactionAbortedException {
         // TODO: some code goes here
         // not necessary for lab1
+        List<Page> pages = Database.getCatalog().getDatabaseFile(t.getRecordId().getPageId().getTableId()).deleteTuple(tid, t);
+        for (Page p : pages) {
+            p.markDirty(false, tid);
+            bp.put(p.getId(), p);
+        }
     }
+
+    private Queue<PageId> q = new LinkedList<>();
 
     /**
      * Flush all dirty pages to disk.
@@ -190,7 +202,9 @@ public class BufferPool {
     public synchronized void flushAllPages() throws IOException {
         // TODO: some code goes here
         // not necessary for lab1
-
+        for (Map.Entry<PageId, Page> i : bp.entrySet()) {
+            flushPage(i.getKey());
+        }
     }
 
     /**
@@ -205,6 +219,14 @@ public class BufferPool {
     public synchronized void removePage(PageId pid) {
         // TODO: some code goes here
         // not necessary for lab1
+        Iterator<PageId> itr_ = q.iterator();
+        while (itr_.hasNext()) {
+            if (itr_.next().equals(pid)) {
+                q.remove();
+                bp.remove(pid);
+                break;
+            }
+        }
     }
 
     /**
@@ -215,6 +237,7 @@ public class BufferPool {
     private synchronized void flushPage(PageId pid) throws IOException {
         // TODO: some code goes here
         // not necessary for lab1
+        ((HeapFile)Database.getCatalog().getDatabaseFile(pid.getTableId())).writePage(bp.get(pid));
     }
 
     /**
@@ -232,6 +255,23 @@ public class BufferPool {
     private synchronized void evictPage() throws DbException {
         // TODO: some code goes here
         // not necessary for lab1
+        if (!q.isEmpty()) {
+            PageId pid_evi =  q.poll();
+            HeapPage hp_evi = (HeapPage) bp.get(pid_evi);
+            TransactionId tid_evi = hp_evi.isDirty();
+            if (tid_evi != null) {
+                try {
+                    flushPage(pid_evi);
+                    hp_evi.markDirty(false, tid_evi);
+                }
+                catch (IOException e) {
+                    throw new DbException("flushPage erro");
+                }
+            }
+            bp.remove(pid_evi);
+            return;
+        }
+        throw new DbException("buffer pool is empty, cannot evict page");
     }
 
 }
