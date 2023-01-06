@@ -5,7 +5,10 @@ import simpledb.storage.Tuple;
 import simpledb.storage.TupleDesc;
 import simpledb.transaction.TransactionAbortedException;
 
+import java.io.FileReader;
+import java.util.ArrayList;
 import java.util.NoSuchElementException;
+import simpledb.common.Type;
 
 /**
  * The Join operator implements the relational join operation.
@@ -22,13 +25,24 @@ public class Join extends Operator {
      * @param child1 Iterator for the left(outer) relation to join
      * @param child2 Iterator for the right(inner) relation to join
      */
+    private JoinPredicate p_;
+    private OpIterator child1_;
+    private OpIterator child2_;
+    Tuple left;
+    Tuple right;
+
     public Join(JoinPredicate p, OpIterator child1, OpIterator child2) {
         // TODO: some code goes here
+        this.p_ = p;
+        this.child1_ = child1;
+        this.child2_ = child2;
+        this.left = null;
+        this.right = null;
     }
 
     public JoinPredicate getJoinPredicate() {
         // TODO: some code goes here
-        return null;
+        return this.p_;
     }
 
     /**
@@ -37,7 +51,7 @@ public class Join extends Operator {
      */
     public String getJoinField1Name() {
         // TODO: some code goes here
-        return null;
+        return child1_.getTupleDesc().getFieldName(p_.getField1());
     }
 
     /**
@@ -46,7 +60,7 @@ public class Join extends Operator {
      */
     public String getJoinField2Name() {
         // TODO: some code goes here
-        return null;
+        return child2_.getTupleDesc().getFieldName(p_.getField2());
     }
 
     /**
@@ -55,20 +69,36 @@ public class Join extends Operator {
      */
     public TupleDesc getTupleDesc() {
         // TODO: some code goes here
-        return null;
+        return TupleDesc.merge(child1_.getTupleDesc(), child2_.getTupleDesc());
     }
 
     public void open() throws DbException, NoSuchElementException,
             TransactionAbortedException {
         // TODO: some code goes here
+        super.open();
+        child1_.open();
+        child2_.open();
+        if (child1_.hasNext()) {
+            left = child1_.next();
+        }
+        if (child2_.hasNext()) {
+            right = child2_.next();
+        }
     }
 
     public void close() {
         // TODO: some code goes here
+        child1_.close();
+        child2_.close();
+        left = null;
+        right = null;
+        super.close();
     }
 
     public void rewind() throws DbException, TransactionAbortedException {
         // TODO: some code goes here
+        this.close();
+        this.open();
     }
 
     /**
@@ -91,18 +121,51 @@ public class Join extends Operator {
      */
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
         // TODO: some code goes here
+        while (left != null || right != null) {
+            Tuple next = null;
+            if (p_.filter(left, right)) {
+                next = new Tuple(this.getTupleDesc());
+                for (int i = 0; i < this.getTupleDesc().numFields() ; i++) {
+                    if (i < left.getTupleDesc().numFields()) {
+                        next.setField(i, left.getField(i));
+                    } else {
+                        next.setField(i, right.getField(i - left.getTupleDesc().numFields()));
+                    }
+                }
+            }
+            if (child2_.hasNext()) {
+                right = child2_.next();
+            }
+            else {
+                if (child1_.hasNext()) {
+                    left = child1_.next();
+                    child2_.rewind();
+                    if (child2_.hasNext()) {
+                        right = child2_.next();
+                    }
+                } else {
+                    left = null;
+                    right = null;
+                }
+            }
+            if (next != null) {
+                return next;
+            }
+        }
         return null;
     }
 
     @Override
     public OpIterator[] getChildren() {
         // TODO: some code goes here
-        return null;
+        return new OpIterator[]{child1_, child2_};
     }
 
     @Override
     public void setChildren(OpIterator[] children) {
         // TODO: some code goes here
+        child1_ = children[0];
+        child2_ = children[1];
     }
 
 }

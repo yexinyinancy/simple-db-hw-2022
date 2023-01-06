@@ -371,7 +371,7 @@ public class LogicalPlan {
         }
 
         JoinOptimizer jo = new JoinOptimizer(this, joins);
-
+        System.out.println("++++"+joins);
         joins = jo.orderJoins(statsMap, filterSelectivities, explain);
 
         for (LogicalJoinNode lj : joins) {

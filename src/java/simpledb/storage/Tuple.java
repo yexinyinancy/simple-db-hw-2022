@@ -74,7 +74,7 @@ public class Tuple implements Serializable {
      */
     public Field getField(int i) {
         // TODO: some code goes here
-        if (tupItems.size() >= i) {
+        if (tupItems.size() > i) {
             return tupItems.get(i);
         }
         return null;
@@ -92,9 +92,9 @@ public class Tuple implements Serializable {
         // TODO: some code goes here
         StringBuffer sb = new StringBuffer();
         for (int i = 0; i < tupItems.size(); i++) {
-            sb.append((tupItems.get(i).toString() + "\t"));
+            sb.append((tupItems.get(i).toString() + " "));
         }
-        return sb.toString();
+        return sb.toString().substring(0, sb.toString().length()-1);
         // throw new UnsupportedOperationException("Implement this");
     }
 
