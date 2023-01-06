@@ -107,7 +107,7 @@ public class Query implements Serializable {
         for (int i = 0; i < td.numFields(); i++) {
             names.append(td.getFieldName(i)).append("\t");
         }
-        System.out.println(names);
+        System.out.println("++"+names);
         for (int i = 0; i < names.length() + td.numFields() * 4; i++) {
             System.out.print("-");
         }

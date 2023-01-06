@@ -120,7 +120,8 @@ public class TupleDesc implements Serializable {
      */
     public Type getFieldType(int i) throws NoSuchElementException {
         // TODO: some code goes here
-        if (items.size() <= i) {
+        
+        if (items.size() <= i || i < 0) {
             throw new NoSuchElementException("i in getFieldName is larger than the array size");
         }
         return items.get(i).fieldType;
