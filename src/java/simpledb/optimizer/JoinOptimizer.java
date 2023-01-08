@@ -3,6 +3,7 @@ package simpledb.optimizer;
 import simpledb.ParsingException;
 import simpledb.common.Database;
 import simpledb.execution.*;
+import simpledb.execution.Predicate.Op;
 import simpledb.storage.TupleDesc;
 
 import javax.swing.*;
@@ -105,7 +106,7 @@ public class JoinOptimizer {
             // HINT: You may need to use the variable "j" if you implemented
             // a join algorithm that's more complicated than a basic
             // nested-loops join.
-            return -1.0;
+            return cost1 + card1 * cost2 + card1 * card2;
         }
     }
 
@@ -145,7 +146,37 @@ public class JoinOptimizer {
                                                    Map<String, Integer> tableAliasToId) {
         int card = 1;
         // TODO: some code goes here
-        return card <= 0 ? 1 : card;
+        if (joinOp.equals(Predicate.Op.EQUALS)) {
+            if (!t1pkey && !t2pkey) {
+                return Math.max(card1, card2);
+            }
+            else if (t1pkey && !t2pkey) {
+                return card2;
+            }
+            else if (!t1pkey && t2pkey) {
+                return card1;
+            }
+            else {
+                return Math.min(card1, card2);
+            }
+        }
+        else if (joinOp.equals(Predicate.Op.NOT_EQUALS)) {
+            if (!t1pkey && !t2pkey) {
+                return card1 * card2 - Math.max(card1, card2);
+            }
+            else if (t1pkey && !t2pkey) {
+                return card1 * card2 - card2;
+            }
+            else if (!t1pkey && t2pkey) {
+                return card1 * card2 - card1;
+            }
+            else {
+                return card1 * card2 - Math.min(card1, card2);
+            }
+        }
+        else {
+            return (int) (0.3 * card1 * card2);
+        }
     }
 
     /**
@@ -201,7 +232,28 @@ public class JoinOptimizer {
         // Not necessary for labs 1 and 2.
 
         // TODO: some code goes here
-        return joins;
+        int n = joins.size();
+        PlanCache bestplan = new PlanCache();
+        CostCard bestcard = null;
+        for (int i = 1; i <= n; i++) {
+            Set<Set<LogicalJoinNode>> subset = enumerateSubsets(joins, i);
+            for (Set<LogicalJoinNode> s : subset) {
+                double bestcost = Double.MAX_VALUE;
+                bestcard = new CostCard();
+                for (LogicalJoinNode node : s) {
+                    CostCard curcc = computeCostAndCardOfSubplan(stats, filterSelectivities, node, s, bestcost, bestplan);
+                    if (curcc != null && curcc.cost < bestcost) {
+                        bestcost = curcc.cost;
+                        bestcard = curcc;
+                    }
+                }
+                bestplan.addPlan(s, bestcost, bestcard.card, bestcard.plan);
+            }
+        }
+        if (explain) {
+            printJoins(bestcard.plan, bestplan, stats, filterSelectivities);
+        }
+        return bestcard.plan;
     }
 
     // ===================== Private Methods =================================
