@@ -6,11 +6,14 @@ import simpledb.common.DeadlockException;
 import simpledb.common.Permissions;
 import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
+import simpledb.transaction.Lock;
+import simpledb.transaction.LockManager;
 
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import javafx.scene.chart.PieChart.Data;
 
@@ -42,6 +45,8 @@ public class BufferPool {
 
     private ConcurrentHashMap<PageId, Page> bp;
     private final int maxNumPages;
+    private LockManager lockmanager_;
+
     /**
      * Creates a BufferPool that caches up to numPages pages.
      *
@@ -49,8 +54,9 @@ public class BufferPool {
      */
     public BufferPool(int numPages) {
         // TODO: some code goes here
-        bp = new ConcurrentHashMap<PageId, Page>(numPages);
+        this.bp = new ConcurrentHashMap<PageId, Page>(numPages);
         this.maxNumPages = numPages;
+        this.lockmanager_ = new LockManager();
     }
 
     public static int getPageSize() {
@@ -85,13 +91,27 @@ public class BufferPool {
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
         // TODO: some code goes here
-        Page page = bp.get(pid);
-        if (page == null) {
+        boolean ret = false;
+        long starttime = System.currentTimeMillis();
+        long maxduration = new Random().nextInt(2000);
+        while (!ret) {
+            long curtime = System.currentTimeMillis();
+            if (curtime - starttime > maxduration) {
+                throw new TransactionAbortedException();
+            }
+            ret = lockmanager_.acquireLock(pid, perm, tid);
+        }
+
+        if (bp.get(pid) == null) {
+            DbFile databaseFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
+            Page page = databaseFile.readPage(pid);
             if (bp.size() >= this.maxNumPages) {
                 evictPage();
             }
-            bp.put(pid, Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid));
-            q.offer(pid);
+            if (!q.contains(pid)) {
+                bp.put(pid, page);
+                q.offer(pid);
+            }
         }
         return bp.get(pid);
     }
@@ -108,6 +128,7 @@ public class BufferPool {
     public void unsafeReleasePage(TransactionId tid, PageId pid) {
         // TODO: some code goes here
         // not necessary for lab1|lab2
+        lockmanager_.releaseLock(pid, tid);
     }
 
     /**
@@ -118,6 +139,7 @@ public class BufferPool {
     public void transactionComplete(TransactionId tid) {
         // TODO: some code goes here
         // not necessary for lab1|lab2
+        transactionComplete(tid, true);
     }
 
     /**
@@ -126,7 +148,7 @@ public class BufferPool {
     public boolean holdsLock(TransactionId tid, PageId p) {
         // TODO: some code goes here
         // not necessary for lab1|lab2
-        return false;
+        return lockmanager_.isHolding(tid, p);
     }
 
     /**
@@ -139,6 +161,32 @@ public class BufferPool {
     public void transactionComplete(TransactionId tid, boolean commit) {
         // TODO: some code goes here
         // not necessary for lab1|lab2
+        if (commit) {
+            try {
+                flushPages(tid);
+            }
+            catch (IOException e) {
+                e.getMessage();
+            }
+        }
+        else {
+            Iterator<PageId> itrq = q.iterator();
+            while (itrq.hasNext()) {
+                PageId pid = itrq.next();
+                TransactionId tid2 = ((HeapPage) bp.get(pid)).isDirty();
+                if (tid2 != null && tid2.equals(tid)) {
+                    removePage(pid);
+                    try {
+                        Page page = Database.getBufferPool().getPage(tid, pid, Permissions.READ_ONLY);
+                        page.markDirty(false,null);
+                    }
+                    catch (TransactionAbortedException | DbException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+        lockmanager_.releaseTransLocks(tid);
     }
 
     /**
@@ -163,8 +211,10 @@ public class BufferPool {
         List<Page> pages = Database.getCatalog().getDatabaseFile(tableId).insertTuple(tid, t);
         for (Page p : pages) {
             p.markDirty(true, tid);
-            bp.put(p.getId(), p);
-            q.offer(p.getId());
+            if (!q.contains(p.getId())) {
+                bp.put(p.getId(), p);
+                q.offer(p.getId());
+            }
         }
     }
 
@@ -192,7 +242,7 @@ public class BufferPool {
         }
     }
 
-    private Queue<PageId> q = new LinkedList<>();
+    private ConcurrentLinkedQueue<PageId> q = new ConcurrentLinkedQueue<PageId>();
 
     /**
      * Flush all dirty pages to disk.
@@ -246,6 +296,14 @@ public class BufferPool {
     public synchronized void flushPages(TransactionId tid) throws IOException {
         // TODO: some code goes here
         // not necessary for lab1|lab2
+        Iterator<PageId> itrq = q.iterator();
+        while (itrq.hasNext()) {
+            PageId pid = itrq.next();
+            TransactionId tidDirty = ((HeapPage) bp.get(pid)).isDirty();
+            if (tidDirty != null && tidDirty.equals(tid)) {
+                flushPage(pid);
+            }
+        }
     }
 
     /**
@@ -255,23 +313,22 @@ public class BufferPool {
     private synchronized void evictPage() throws DbException {
         // TODO: some code goes here
         // not necessary for lab1
-        if (!q.isEmpty()) {
-            PageId pid_evi =  q.poll();
+        Iterator<PageId> itr = q.iterator();
+        while (itr.hasNext()) {
+            PageId pid_evi = itr.next();
             HeapPage hp_evi = (HeapPage) bp.get(pid_evi);
             TransactionId tid_evi = hp_evi.isDirty();
             if (tid_evi != null) {
-                try {
-                    flushPage(pid_evi);
-                    hp_evi.markDirty(false, tid_evi);
-                }
-                catch (IOException e) {
-                    throw new DbException("flushPage erro");
-                }
+                continue;
             }
             bp.remove(pid_evi);
+            q.remove(pid_evi);
             return;
         }
         throw new DbException("buffer pool is empty, cannot evict page");
     }
 
+    public LockManager getLockManager() {
+        return this.lockmanager_;
+    }
 }

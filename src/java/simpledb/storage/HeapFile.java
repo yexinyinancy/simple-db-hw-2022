@@ -78,44 +78,26 @@ public class HeapFile implements DbFile {
     public Page readPage(PageId pid) {
         // TODO: some code goes here
         // some code goes here
-        // int tableid = pid.getTableId();
-        // int pgNo = pid.getPageNumber();
-        // int pageSize = Database.getBufferPool().getPageSize();
-        // byte[] rawPgData = HeapPage.createEmptyPageData();
-        // // random access read from disk
-        // try {
-        //     FileInputStream in = new FileInputStream(file);
-        //     in.skip(pgNo * pageSize);
-        //     in.read(rawPgData);
-        //     return new HeapPage(new HeapPageId(tableid, pgNo), rawPgData);
-        // } catch (FileNotFoundException e) {
-        //     throw new IllegalArgumentException("HeapFile: readPage: file not found");
-        // } catch (IOException e) {
-        //     throw new IllegalArgumentException("HeapFile: readPage: file not found");
-        // }
+        FileInputStream fileInputStream = null;
+        HeapPage heapPage = null;
+        int size = BufferPool.getPageSize();
+        byte[] buf = new byte[size];
+        try {
 
-        if (getId() == pid.getTableId()) {
-    		int pgNo = pid.getPageNumber();
-    		
-    		if (pgNo>=0 && pgNo<numPages()) {
-    			byte[] bytes = HeapPage.createEmptyPageData();
-	    			
-    			try {
-    				RandomAccessFile raf = new RandomAccessFile(file, "r");
-    				
-    				try {
-    					raf.seek(1L*BufferPool.getPageSize()*pid.getPageNumber());
-						raf.read(bytes, 0, BufferPool.getPageSize());
-						return new HeapPage(new HeapPageId(pid.getTableId(), pgNo), bytes);
-    				} finally {
-    					raf.close();
-    				}
-    			} catch (IOException e) {
-    				throw new RuntimeException(e);
-    			}
-    		}
-    	}
-        throw new IllegalArgumentException("page not in the file");
+            RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r");
+            randomAccessFile.seek((long) pid.getPageNumber() * size);
+            if (randomAccessFile.read(buf) == -1) {
+                return null;
+            }
+
+            heapPage = new HeapPage((HeapPageId) pid, buf);
+
+            randomAccessFile.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return heapPage;
     }
 
     // see DbFile.java for javadocs
@@ -148,6 +130,14 @@ public class HeapFile implements DbFile {
         for (int i = 0; i < numPages(); i++) {
             HeapPageId pid = new HeapPageId(getId(), i);
             HeapPage p = (HeapPage) Database.getBufferPool().getPage(tid, pid, Permissions.READ_WRITE);
+            if (p == null) {
+                Database.getBufferPool().getLockManager().releaseLock(pid, tid);
+                continue;
+            }
+            if (p.getNumUnusedSlots() == 0) {
+                Database.getBufferPool().getLockManager().releaseLock(pid, tid);
+                continue;
+            }
             if (p.getNumUnusedSlots() > 0) {
                 p.insertTuple(t);
                 ret.add(p);
@@ -202,7 +192,7 @@ public class HeapFile implements DbFile {
             if (this.curPageId == null || this.curPageId >= this.numPage) {
                 return false;
             }
-            while (this.curPageId < this.numPage-1) {
+            while (this.curPageId < this.numPage - 1) {
                 if (this.itr.hasNext()) {
                     return true;
                 }
