@@ -173,7 +173,7 @@ public class BufferPool {
             Iterator<PageId> itrq = q.iterator();
             while (itrq.hasNext()) {
                 PageId pid = itrq.next();
-                TransactionId tid2 = ((HeapPage) bp.get(pid)).isDirty();
+                TransactionId tid2 = bp.get(pid).isDirty();
                 if (tid2 != null && tid2.equals(tid)) {
                     removePage(pid);
                     try {
@@ -237,8 +237,7 @@ public class BufferPool {
         // not necessary for lab1
         List<Page> pages = Database.getCatalog().getDatabaseFile(t.getRecordId().getPageId().getTableId()).deleteTuple(tid, t);
         for (Page p : pages) {
-            p.markDirty(false, tid);
-            bp.put(p.getId(), p);
+            p.markDirty(true, tid);
         }
     }
 
@@ -272,7 +271,7 @@ public class BufferPool {
         Iterator<PageId> itr_ = q.iterator();
         while (itr_.hasNext()) {
             if (itr_.next().equals(pid)) {
-                q.remove();
+                itr_.remove();
                 bp.remove(pid);
                 break;
             }
@@ -287,7 +286,7 @@ public class BufferPool {
     private synchronized void flushPage(PageId pid) throws IOException {
         // TODO: some code goes here
         // not necessary for lab1
-        ((HeapFile)Database.getCatalog().getDatabaseFile(pid.getTableId())).writePage(bp.get(pid));
+        Database.getCatalog().getDatabaseFile(pid.getTableId()).writePage(bp.get(pid));
     }
 
     /**
@@ -299,7 +298,7 @@ public class BufferPool {
         Iterator<PageId> itrq = q.iterator();
         while (itrq.hasNext()) {
             PageId pid = itrq.next();
-            TransactionId tidDirty = ((HeapPage) bp.get(pid)).isDirty();
+            TransactionId tidDirty = bp.get(pid).isDirty();
             if (tidDirty != null && tidDirty.equals(tid)) {
                 flushPage(pid);
             }
@@ -316,7 +315,7 @@ public class BufferPool {
         Iterator<PageId> itr = q.iterator();
         while (itr.hasNext()) {
             PageId pid_evi = itr.next();
-            HeapPage hp_evi = (HeapPage) bp.get(pid_evi);
+            Page hp_evi = bp.get(pid_evi);
             TransactionId tid_evi = hp_evi.isDirty();
             if (tid_evi != null) {
                 continue;
