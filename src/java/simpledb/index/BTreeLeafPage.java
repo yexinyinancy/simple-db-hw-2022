@@ -322,7 +322,6 @@ public class BTreeLeafPage extends BTreePage {
 
         if (emptySlot == -1)
             throw new DbException("called addTuple on page with no empty slots.");
-
         // find the last key less than or equal to the key being inserted
         int lessOrEqKey = -1;
         Field key = t.getField(keyField);
@@ -334,7 +333,6 @@ public class BTreeLeafPage extends BTreePage {
                     break;
             }
         }
-
         // shift records back or forward to fill empty slot and make room for new record
         // while keeping records in sorted order
         int goodSlot = -1;
@@ -349,7 +347,6 @@ public class BTreeLeafPage extends BTreePage {
             }
             goodSlot = lessOrEqKey + 1;
         }
-
         // insert new record into the correct spot in sorted order
         markSlotUsed(goodSlot, true);
         Debug.log(1, "BTreeLeafPage.insertTuple: new tuple, tableId = %d pageId = %d slotId = %d", pid.getTableId(), pid.getPageNumber(), goodSlot);
