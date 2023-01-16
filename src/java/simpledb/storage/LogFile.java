@@ -474,6 +474,29 @@ public class LogFile {
             synchronized (this) {
                 preAppend();
                 // TODO: some code goes here
+                long curOffset = raf.getFilePointer();
+                long start = tidToFirstLogRecord.get(tid.getId());
+                raf.seek(start);
+                while (true) {
+                    try {
+                        int cpType = raf.readInt();
+                        long cpTid = raf.readLong();
+                        if (cpType == UPDATE_RECORD) {
+                            Page before = readPageData(raf);
+                            if (cpTid == tid.getId()) {
+                                HeapFile file = (HeapFile) Database.getCatalog().getDatabaseFile(before.getId().getTableId());
+                                file.writePage(before);
+                                Database.getBufferPool().removePage(before.getId());
+                            }
+                            Page after = readPageData(raf);
+                        }
+                        cpTid = raf.readLong();
+                    }
+                    catch (IOException e) {
+                        break;
+                    }
+                }
+                raf.seek(curOffset);
             }
         }
     }
@@ -503,6 +526,64 @@ public class LogFile {
             synchronized (this) {
                 recoveryUndecided = false;
                 // TODO: some code goes here
+                Map<Long, List<Page[]>> map = new HashMap<>();
+                raf.seek(0);
+                // print();
+                long checkpointOffset = raf.readLong();
+                if (checkpointOffset != -1) {
+                    Map<Long, Long> pos = new HashMap<>();
+                    raf.seek(checkpointOffset);
+                    raf.readInt();
+                    raf.readLong();
+                    int cnt = raf.readInt();
+                    for (int i = 0; i < cnt; i++) {
+                        long transId = raf.readLong();
+                        long posBegin = raf.readLong();
+                        raf.seek(posBegin);
+                        pos.put(transId, posBegin);
+                        recover_helper(raf, map);
+                    }
+                }
+                else {
+                    recover_helper(raf, map);
+                }
+                for (Map.Entry<Long, List<Page[]>> entry : map.entrySet()) {
+                    Page[] pages = entry.getValue().get(0);
+                    HeapFile file = (HeapFile) Database.getCatalog().getDatabaseFile(pages[0].getId().getTableId());
+                    file.writePage(pages[0]);
+                }
+                map.clear();
+            }
+        }
+    }
+
+    private void recover_helper(RandomAccessFile raf, Map<Long, List<Page[]>> map) {
+        while (true) {
+            try {
+                int cpType = raf.readInt();
+                long cpTid = raf.readLong();
+                if (cpType == UPDATE_RECORD) {
+                    map.put(cpTid, map.getOrDefault(cpTid, new ArrayList<Page[]>()));
+                    Page before = readPageData(raf);
+                    Page after = readPageData(raf);
+                    map.get(cpTid).add(new Page[]{before, after});
+                }
+                else if (cpType == COMMIT_RECORD && map.containsKey(cpTid)) {
+                    Page[] pages = map.get(cpTid).get(map.get(cpTid).size() - 1);
+                    HeapFile file = (HeapFile) Database.getCatalog().getDatabaseFile(pages[0].getId().getTableId());
+                    file.writePage(pages[1]);
+                    map.remove(cpTid);
+                }
+                else if (cpType == ABORT_RECORD && map.containsKey(cpTid)) {
+                    Page[] pages = map.get(cpTid).get(0);
+                    HeapFile file = (HeapFile) Database.getCatalog().getDatabaseFile(pages[0].getId().getTableId());
+                    file.writePage(pages[0]);
+                    map.remove(cpTid);
+                }
+                cpTid = raf.readLong();
+            }
+            catch (IOException e) {
+                break;
             }
         }
     }
