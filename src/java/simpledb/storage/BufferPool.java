@@ -163,7 +163,16 @@ public class BufferPool {
         // not necessary for lab1|lab2
         if (commit) {
             try {
-                flushPages(tid);
+                // flushPages(tid);
+                Iterator<PageId> itrq = q.iterator();
+                while (itrq.hasNext()) {
+                    PageId pid = itrq.next();
+                    TransactionId tidDirty = bp.get(pid).isDirty();
+                    if (tidDirty != null && tidDirty.equals(tid)) {
+                        flushPage(pid);
+                        bp.get(pid).setBeforeImage();
+                    }
+                }
             }
             catch (IOException e) {
                 e.getMessage();
@@ -286,7 +295,13 @@ public class BufferPool {
     private synchronized void flushPage(PageId pid) throws IOException {
         // TODO: some code goes here
         // not necessary for lab1
-        Database.getCatalog().getDatabaseFile(pid.getTableId()).writePage(bp.get(pid));
+        Page p = bp.get(pid);
+        TransactionId dirtier = p.isDirty();
+        if (dirtier != null){
+            Database.getLogFile().logWrite(dirtier, p.getBeforeImage(), p);
+            Database.getLogFile().force();
+        }
+        Database.getCatalog().getDatabaseFile(pid.getTableId()).writePage(p);
     }
 
     /**
